@@ -1,11 +1,15 @@
 {
     "manifest_version": 1,
-    "name": "BetterNCMPlugin",
-    "version": "0.1.0",
+    "name": "TinyNCM", 
+    "version": "0.2.0",
+    "author": "MicroBlock", 
+    "description": "更改字体，删除无用组件",
+    "betterncm_version": "^0.2.0",
+    "preview": "preview.png",
     "injects": {
-        "Main": [
+        "Main": [ 
             {
-                "file": "main.js"
+                "file": "./dist/main.js"
             }
         ]
     }
