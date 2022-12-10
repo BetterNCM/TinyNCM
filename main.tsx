@@ -106,7 +106,7 @@ const ElementMap = {
 }
 
 function applyTinyNCM() {
-    let config = JSON.parse(localStorage["cc.microblock.betterncm.tinyncm.minify"]);
+    let config = JSON.parse(localStorage["cc.microblock.betterncm.tinyncm.minify"] || "{}");
     let css = Object.entries(config).map(([selector, value]) => {
         if (value === 1) return `${selector}{display:none;}`;
         if (value === 2) return `${selector}{opacity:0;}`;
@@ -157,20 +157,20 @@ function MinifyEle() {
 applyTinyNCM();
 
 function applyFont() {
-    const config = JSON.parse(localStorage["cc.microblock.betterncm.tinyncm.font"]);
+    const config = JSON.parse(localStorage["cc.microblock.betterncm.tinyncm.font"] || "{}");
 
     if (!document.querySelector(".tinyNCM-Font"))
         document.head.appendChild(dom("style", { class: ["tinyNCM-Font"] }));
 
     let cssDom = document.querySelector(".tinyNCM-Font");
-    let css="";
+    let css = "";
     if (config.fontFamily)
         css += `
     *:not(.no-force-font){
         font-family:'${config.fontFamily}' !important;
     }
     `;
-    cssDom.innerHTML=css;
+    cssDom.innerHTML = css;
 }
 
 applyFont();
