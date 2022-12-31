@@ -4,7 +4,7 @@
     "version": "0.2.2",
     "author": "MicroBlock", 
     "description": "更改字体，删除无用组件",
-    "betterncm_version": "^0.2.0",
+    "betterncm_version": "*.*.*",
     "preview": "preview.png",
     "injects": {
         "Main": [ 
