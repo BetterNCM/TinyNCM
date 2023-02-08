@@ -78,7 +78,8 @@ const ElementMap = {
         "喜欢": ".btn-love",
         "收藏": ".btn-fav",
         "下载": ".btn-dld",
-        "分享": ".btn-share"
+        "分享": ".btn-share",
+        "下载按钮上的的VIP图标": ".labelVip"
     }, "播放页面": {
         "直播": ".g-singlec-live",
         "MV": ".tag-wrap",
