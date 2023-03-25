@@ -100,14 +100,110 @@ const ElementMap = {
         "VIP": ".u-micn-vip"
     }
 };
+function selectAnyElement() {
+    return new Promise((resolve, reject) => {
+        if (document.querySelector('.tinyNCM-Selected')) {
+            reject("Already selecting");
+            return;
+        }
+        // create fixed tips
+        let tips = dom("div", {
+            style: {
+                position: "fixed", left: "10px",
+                margin: "10px",
+                top: "10px", width: "200px", height: "50px", background: "#ffffff88", border: "1px solid #ffffff33",
+                pointerEvent: "none",
+                padding: "10px", zIndex: 9999, overflow: "auto",
+                boxShadow: "0 0 10px 0 rgba(0,0,0,0.5)",
+                color: "black",
+                borderRadius: "4px"
+            },
+            innerText: "按 [Enter] 确定选择标红元素，按 [↑] 扩大选区，按 [↓] 缩小选区，按 [Esc] 取消"
+        }, dom("style", { innerHTML: `.tinyNCM-Selected{ background: #ff000033; border: 3px solid red; box-sizing: border-box; }` }));
+        document.body.appendChild(tips);
+        let range = 0;
+        let lastSelectedElement, lastHoveredElement;
+        const updateSelectedElement = (selectedElement) => {
+            if (lastSelectedElement !== selectedElement) {
+                lastSelectedElement?.classList.remove("tinyNCM-Selected");
+                selectedElement.classList.add("tinyNCM-Selected");
+                lastSelectedElement = selectedElement;
+            }
+        };
+        const mouseMoveListener = e => {
+            const hoveredElement = document.elementFromPoint(e.clientX, e.clientY);
+            if (lastHoveredElement !== hoveredElement) {
+                lastHoveredElement = hoveredElement;
+                range = 0;
+                updateSelectedElement(getSelectedElement(hoveredElement, range));
+            }
+        };
+        const generateQuerySelector = function (el) {
+            if (el.tagName.toLowerCase() == "body")
+                return "body";
+            if (el.tagName.toLowerCase() == "html")
+                return "HTML";
+            var str = el.tagName;
+            str += (el.id != "" && !el.id.startsWith("auto-")) ? "#" + el.id : "";
+            if (el.className) {
+                var classes = el.className.split(/\s/);
+                for (var i = 0; i < classes.length; i++) {
+                    str += "." + classes[i];
+                }
+            }
+            return generateQuerySelector(el.parentNode) + " > " + str;
+        };
+        const getSelectedElement = (baseEle, r) => {
+            for (let i = 0; i < r; i++)
+                baseEle = baseEle.parentElement;
+            return baseEle;
+        };
+        const keydownListener = e => {
+            // if is up or down
+            if (e.key === "ArrowUp") {
+                range++;
+                e.preventDefault();
+                updateSelectedElement(getSelectedElement(lastHoveredElement, range));
+            }
+            else if (e.key === "ArrowDown") {
+                range--;
+                console.log(range);
+                if (range < 0)
+                    range = 0;
+                e.preventDefault();
+                updateSelectedElement(getSelectedElement(lastHoveredElement, range));
+            }
+            else if (e.key === "Enter") {
+                document.removeEventListener("keydown", keydownListener);
+                document.removeEventListener("mousemove", mouseMoveListener);
+                tips.remove();
+                lastSelectedElement.classList.remove("tinyNCM-Selected");
+                let selector = generateQuerySelector(lastSelectedElement);
+                resolve(selector);
+            }
+            else if (e.key === "Escape") {
+                document.removeEventListener("keydown", keydownListener);
+                document.removeEventListener("mousemove", mouseMoveListener);
+                tips.remove();
+                lastSelectedElement.classList.remove("tinyNCM-Selected");
+                reject("Cancelled");
+            }
+        };
+        document.addEventListener("mousemove", mouseMoveListener);
+        document.addEventListener("keydown", keydownListener);
+    });
+}
 function applyTinyNCM() {
-    let config = JSON.parse(localStorage["cc.microblock.betterncm.tinyncm.minify"] || "{}");
+    const config = JSON.parse(localStorage["cc.microblock.betterncm.tinyncm.minify"] || "{}");
+    const custom = JSON.parse(localStorage["cc.microblock.betterncm.tinyncm.custom"] || "[]");
     let css = Object.entries(config).map(([selector, value]) => {
         if (value === 1)
             return `${selector}{display:none;}`;
         if (value === 2)
             return `${selector}{opacity:0;}`;
         return "";
+    }).join("\n") + "\n\n" + custom.map(({ selector }) => {
+        return `${selector}{display:none;}`;
     }).join("\n");
     if (!document.querySelector(".tinyNCM-Minify"))
         document.head.appendChild(dom("style", { class: ["tinyNCM-Minify"] }));
@@ -119,7 +215,12 @@ function MinifyEle() {
     React.useEffect(() => {
         localStorage["cc.microblock.betterncm.tinyncm.minify"] = JSON.stringify(config);
         applyTinyNCM();
-    });
+    }, [config]);
+    const [custom, setCustom] = React.useState(JSON.parse(localStorage["cc.microblock.betterncm.tinyncm.custom"] || "[]"));
+    React.useEffect(() => {
+        localStorage["cc.microblock.betterncm.tinyncm.custom"] = JSON.stringify(custom);
+        applyTinyNCM();
+    }, [custom]);
     let collectionsEle = [];
     for (let collection in ElementMap) {
         let configsEle = [];
@@ -137,7 +238,32 @@ function MinifyEle() {
         }
         collectionsEle.push((React.createElement(Expandable, { title: collection }, configsEle)));
     }
-    return React.createElement(React.Fragment, null, collectionsEle);
+    return React.createElement(React.Fragment, null,
+        React.createElement("div", { style: { padding: "10px", fontSize: "20px", fontWeight: "800" } }, "\u9884\u8BBE\u5C4F\u853D\u9879"),
+        collectionsEle,
+        React.createElement("div", { style: { padding: "10px", fontSize: "20px", fontWeight: "800" } }, "\u81EA\u5B9A\u4E49\u5C4F\u853D\u9879"),
+        React.createElement("button", { style: { backgroundColor: "white", color: "black" }, onClick: async () => {
+                try {
+                    const selector = await selectAnyElement();
+                    setCustom([...custom, { selector, mode: 0, text: document.querySelector(selector).innerText.replace(/\s/g, '').slice(0, 20) }]);
+                }
+                catch (e) { }
+            } }, "\u9009\u62E9\u81EA\u5B9A\u4E49\u5C4F\u853D\u9879"),
+        React.createElement("button", { style: { backgroundColor: "white", color: "black" }, onClick: async () => {
+                try {
+                    const selector = prompt("请输入CSS选择器");
+                    if (!selector)
+                        return;
+                    setCustom([...custom, { selector, mode: 0, text: document.querySelector(selector).innerText.replace(/\s/g, '').slice(0, 20) }]);
+                }
+                catch (e) { }
+            } }, "\u624B\u52A8\u6DFB\u52A0\uFF08\u9AD8\u7EA7\uFF09"),
+        React.createElement("br", null),
+        custom.map((item, index) => {
+            return React.createElement(Checkbox, { name: `${item.text} (${item.selector})`, value: 1, color: (!document.querySelector(item.selector)) && "#ffffff99", onClick: (e) => {
+                    setCustom(custom.filter(v => v.selector !== item.selector));
+                } });
+        }));
 }
 applyTinyNCM();
 function applyFont() {
@@ -299,7 +425,7 @@ function ColorsEle() {
     if (!colors)
         return React.createElement("div", null, "\u52A0\u8F7D\u4E2D...");
     return (React.createElement("div", null,
-        React.createElement("button", { onClick: () => { setConfig({}); } }, "\u91CD\u7F6E"),
+        React.createElement("button", { style: { backgroundColor: "white", color: "black" }, onClick: () => { setConfig({}); } }, "\u91CD\u7F6E"),
         Object.values(colors).map(color => {
             const chatgptComment = chatgptColorUsagePredictions.split('\n').find(v => v.startsWith(color.originColor))?.split(' ')[1];
             const manualComment = colorUsageComments.split('\n').find(v => v.startsWith(color.originColor))?.split(' ')[1];
@@ -313,15 +439,15 @@ function ColorsEle() {
                 React.createElement("span", { style: { backgroundColor: color.originColor } }, "\u00A0\u00A0\u00A0\u00A0\u00A0\u00A0\u00A0\u00A0\u00A0\u00A0\u00A0\u00A0\u00A0\u00A0"),
                 React.createElement("input", { style: { margin: '0.2em 0.5em', borderRadius: '0.5em' }, type: "color", defaultValue: config[color.originColor] ?? color.originColor, onChange: (e) => {
                         setConfig({ ...config, [color.originColor]: e.target.value });
-                        e.target.nextElementSibling.checked = false;
+                        e.target.nextElementSibling.nextElementSibling.checked = false;
                     } }),
+                React.createElement("button", { style: { backgroundColor: "white", color: "black" }, onClick: (e) => e.currentTarget.previousElementSibling.value = color.originColor }, "\u8FD8\u539F\u9ED8\u8BA4"),
                 React.createElement("input", { type: "checkbox", value: config[color.originColor]?.length == 9 && config[color.originColor]?.endsWith("ff"), onClick: (e) => {
                         // switch 'ff' after color code
                         if (!color.originColor.startsWith("var("))
                             setConfig({ ...config, [color.originColor]: config[color.originColor].length == 9 && config[color.originColor].endsWith("ff") ? config[color.originColor].slice(0, 7) : config[color.originColor] + "ff" });
                     } }),
-                React.createElement("span", { style: { backgroundColor: "white", color: "black" } }, "\u5FFD\u7565\u900F\u660E\u5EA6"),
-                React.createElement("button", { style: { backgroundColor: "white", color: "black" }, onClick: (e) => e.currentTarget.previousElementSibling.value = color.originColor }, "\u8FD8\u539F\u9ED8\u8BA4")));
+                React.createElement("span", { style: { backgroundColor: "white", color: "black" } }, "\u5FFD\u7565\u900F\u660E\u5EA6")));
         })));
 }
 plugin.onConfig((tools) => {

@@ -103,12 +103,112 @@ const ElementMap = {
     }
 }
 
+function selectAnyElement() {
+    return new Promise((resolve, reject) => {
+        if (document.querySelector('.tinyNCM-Selected')) {
+            reject("Already selecting");
+            return;
+        }
+        // create fixed tips
+        let tips = dom("div",
+            {
+                style: {
+                    position: "fixed", left: "10px",
+                    margin: "10px",
+                    top: "10px", width: "200px", height: "50px", background: "#ffffff88", border: "1px solid #ffffff33",
+                    pointerEvent: "none",
+                    padding: "10px", zIndex: 9999, overflow: "auto",
+                    boxShadow: "0 0 10px 0 rgba(0,0,0,0.5)",
+                    color: "black",
+                    borderRadius: "4px"
+                }
+                , innerText: "按 [Enter] 确定选择标红元素，按 [↑] 扩大选区，按 [↓] 缩小选区，按 [Esc] 取消"
+            }, dom("style", { innerHTML: `.tinyNCM-Selected{ background: #ff000033; border: 3px solid red; box-sizing: border-box; }` }));
+        document.body.appendChild(tips);
+
+        let range = 0;
+        let lastSelectedElement, lastHoveredElement;
+        const updateSelectedElement = (selectedElement) => {
+            if (lastSelectedElement !== selectedElement) {
+                lastSelectedElement?.classList.remove("tinyNCM-Selected");
+                selectedElement.classList.add("tinyNCM-Selected");
+                lastSelectedElement = selectedElement;
+            }
+        }
+        const mouseMoveListener = e => {
+            const hoveredElement = document.elementFromPoint(e.clientX, e.clientY);
+            if (lastHoveredElement !== hoveredElement) {
+                lastHoveredElement = hoveredElement;
+                range = 0;
+                updateSelectedElement(getSelectedElement(hoveredElement, range))
+            }
+        }
+
+        const generateQuerySelector = function (el) {
+            if (el.tagName.toLowerCase() == "body")
+                return "body";
+
+            if (el.tagName.toLowerCase() == "html")
+                return "HTML";
+            var str = el.tagName;
+            str += (el.id != "" && !el.id.startsWith("auto-")) ? "#" + el.id : "";
+            if (el.className) {
+                var classes = el.className.split(/\s/);
+                for (var i = 0; i < classes.length; i++) {
+                    str += "." + classes[i]
+                }
+            }
+            return generateQuerySelector(el.parentNode) + " > " + str;
+        }
+
+        const getSelectedElement = (baseEle, r) => {
+            for (let i = 0; i < r; i++)baseEle = baseEle.parentElement;
+            return baseEle
+        }
+
+        const keydownListener = e => {
+            // if is up or down
+            if (e.key === "ArrowUp") {
+                range++;
+                e.preventDefault();
+                updateSelectedElement(getSelectedElement(lastHoveredElement, range))
+            } else if (e.key === "ArrowDown") {
+                range--;
+                console.log(range)
+                if (range < 0) range = 0;
+                e.preventDefault();
+                updateSelectedElement(getSelectedElement(lastHoveredElement, range))
+            } else if (e.key === "Enter") {
+                document.removeEventListener("keydown", keydownListener);
+                document.removeEventListener("mousemove", mouseMoveListener);
+                tips.remove();
+                lastSelectedElement.classList.remove("tinyNCM-Selected");
+                let selector = generateQuerySelector(lastSelectedElement);
+                resolve(selector);
+            } else if (e.key === "Escape") {
+                document.removeEventListener("keydown", keydownListener);
+                document.removeEventListener("mousemove", mouseMoveListener);
+                tips.remove();
+                lastSelectedElement.classList.remove("tinyNCM-Selected");
+                reject("Cancelled");
+            }
+        }
+
+        document.addEventListener("mousemove", mouseMoveListener);
+        document.addEventListener("keydown", keydownListener);
+    });
+}
+
 function applyTinyNCM() {
-    let config = JSON.parse(localStorage["cc.microblock.betterncm.tinyncm.minify"] || "{}");
+    const config = JSON.parse(localStorage["cc.microblock.betterncm.tinyncm.minify"] || "{}");
+    const custom = JSON.parse(localStorage["cc.microblock.betterncm.tinyncm.custom"] || "[]");
+
     let css = Object.entries(config).map(([selector, value]) => {
         if (value === 1) return `${selector}{display:none;}`;
         if (value === 2) return `${selector}{opacity:0;}`;
         return "";
+    }).join("\n") + "\n\n" + custom.map(({ selector }) => {
+        return `${selector}{display:none;}`;
     }).join("\n");
 
     if (!document.querySelector(".tinyNCM-Minify"))
@@ -123,7 +223,14 @@ function MinifyEle() {
     React.useEffect(() => {
         localStorage["cc.microblock.betterncm.tinyncm.minify"] = JSON.stringify(config);
         applyTinyNCM();
-    });
+    }, [config]);
+
+    const [custom, setCustom] = React.useState(JSON.parse(localStorage["cc.microblock.betterncm.tinyncm.custom"] || "[]"));
+    React.useEffect(() => {
+        localStorage["cc.microblock.betterncm.tinyncm.custom"] = JSON.stringify(custom);
+        applyTinyNCM();
+    }, [custom]);
+
 
     let collectionsEle = [];
 
@@ -146,7 +253,32 @@ function MinifyEle() {
         }
         collectionsEle.push((<Expandable title={collection}>{configsEle}</Expandable>))
     }
-    return <>{collectionsEle}</>
+    return <>
+        <div style={{ padding: "10px", fontSize: "20px", fontWeight: "800" }}>预设屏蔽项</div>
+        {collectionsEle}
+        <div style={{ padding: "10px", fontSize: "20px", fontWeight: "800" }}>自定义屏蔽项</div>
+        <button style={{ backgroundColor: "white", color: "black" }} onClick={async () => {
+            try {
+                const selector = await selectAnyElement();
+                setCustom([...custom, { selector, mode: 0, text: document.querySelector(selector).innerText.replace(/\s/g, '').slice(0, 20) }])
+            } catch (e) { }
+        }}>选择自定义屏蔽项</button >
+        <button style={{ backgroundColor: "white", color: "black" }} onClick={async () => {
+            try {
+                const selector = prompt("请输入CSS选择器");
+                if (!selector) return;
+                setCustom([...custom, { selector, mode: 0, text: document.querySelector(selector).innerText.replace(/\s/g, '').slice(0, 20) }])
+            } catch (e) { }
+        }}>手动添加（高级）</button >
+        <br />
+        {custom.map((item, index) => {
+            return <Checkbox name={`${item.text} (${item.selector})`} value={1} color={
+                (!document.querySelector(item.selector)) && "#ffffff99"
+            } onClick={(e) => {
+                setCustom(custom.filter(v => v.selector !== item.selector));
+            }} />
+        })}
+    </>
 }
 
 applyTinyNCM();
@@ -329,7 +461,7 @@ function ColorsEle() {
 
     if (!colors) return <div>加载中...</div>
     return (<div>
-        <button onClick={() => { setConfig({}) }}>重置</button>
+        <button style={{ backgroundColor: "white", color: "black" }} onClick={() => { setConfig({}) }}>重置</button>
         {
             Object.values(colors).map(color => {
                 const chatgptComment = chatgptColorUsagePredictions.split('\n').find(v => v.startsWith(color.originColor))?.split(' ')[1];
@@ -347,8 +479,10 @@ function ColorsEle() {
                         defaultValue={config[color.originColor] ?? color.originColor}
                         onChange={(e) => {
                             setConfig({ ...config, [color.originColor]: e.target.value });
-                            e.target.nextElementSibling.checked = false;
+                            e.target.nextElementSibling.nextElementSibling.checked = false;
                         }} />
+
+                    <button style={{ backgroundColor: "white", color: "black" }} onClick={(e) => e.currentTarget.previousElementSibling.value = color.originColor}>还原默认</button>
 
                     <input type="checkbox"
                         value={config[color.originColor]?.length == 9 && config[color.originColor]?.endsWith("ff")}
@@ -359,7 +493,7 @@ function ColorsEle() {
                         }}
                     />
                     <span style={{ backgroundColor: "white", color: "black" }} >忽略透明度</span>
-                    <button style={{ backgroundColor: "white", color: "black" }} onClick={(e) => e.currentTarget.previousElementSibling.value = color.originColor}>还原默认</button>
+
                 </div>)
             })
         }
